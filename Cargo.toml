@@ -7,8 +7,26 @@ readme = "README.md"
 edition = "2021"
 
 [dependencies]
+<<<<<<< HEAD
 bitflags = "1.3"
 goblin = { version = "0.4", default-features = false, features = ["elf64", "elf32", "endian_fd"] }
+=======
+bitflags = "1.2.*"
+
+[target.'cfg(target_arch = "riscv64")'.dependencies]
+hermit-dtb = {git = "https://github.com/hermitcore/dtb.git", branch = "master"}
+
+[target.'cfg(target_arch = "riscv64")'.dependencies.riscv]
+version = "0.6.0"
+
+[target.'cfg(target_arch = "riscv64")'.dependencies.trapframe]
+version = "0.7.0"
+
+[dependencies.goblin]
+version = "0.2"
+default-features = false
+features = ["elf64", "elf32", "endian_fd"]
+>>>>>>> 3e8ffee (Add riscv support)
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 multiboot = "0.7"
