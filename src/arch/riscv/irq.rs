@@ -6,7 +6,6 @@
 // copied, modified, or distributed except according to those terms.
 
 use riscv::register::*;
-use riscv::register::{scause::Scause, stvec};
 use riscv::asm::wfi;
 use trapframe::TrapFrame;
 
@@ -72,20 +71,12 @@ pub fn nested_enable(was_enabled: bool) {
 	}
 }
 
-#[no_mangle]
-pub extern "C" fn irq_install_handler(irq_number: u32, handler: usize) {
-	loaderlog!("Install handler for interrupt {}", irq_number);
-	// TODO direct or vector?
-	//unsafe{stvec::write(handler,stvec::TrapMode::Direct);}
-}
-
 //Derived from rCore: https://github.com/rcore-os/rCore
 /// Dispatch and handle interrupt.
 ///
 /// This function is called from `trap.S` which is in the trapframe crate.
 #[no_mangle]
 pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
-    use self::scause::{Exception as E, Interrupt as I, Trap};
     let scause = scause::read();
     let stval = stval::read();
     //trace!("Interrupt @ CPU{}: {:?} ", super::cpu::id(), scause.cause());
