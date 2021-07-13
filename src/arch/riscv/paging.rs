@@ -6,18 +6,16 @@
 // copied, modified, or distributed except according to those terms.
 
 use core::marker::PhantomData;
-use core::{fmt, ptr, usize, mem};
+use core::{usize};
 
 //use crate::arch::riscv::kernel::percore::*;
 //use crate::arch::riscv::kernel::processor;
-use crate::arch::riscv::{MEM_BASE, MEM_SIZE};
 use crate::arch::riscv::physicalmem;
 use crate::arch::riscv::addr::{PhysAddr, VirtAddr};
 //use crate::mm;
 //use crate::scheduler;
 
 use riscv::asm::sfence_vma;
-use riscv::register::satp;
 
 static mut ROOT_PAGETABLE: PageTable<L2Table> = PageTable::new();
 
@@ -614,7 +612,7 @@ pub fn virtual_to_physical(virtual_address: VirtAddr) -> PhysAddr {
 	} */
 	let mut vpn: [u64; PAGE_LEVELS] = [0; PAGE_LEVELS];
 
-	for i in (0..PAGE_LEVELS){
+	for i in 0..PAGE_LEVELS{
 		vpn[i] = (virtual_address >> (PAGE_BITS + i*PAGE_MAP_BITS)) & PAGE_MAP_MASK as u64;
 		loaderlog!("i: {}, vpn[i]: {:#X}, {:#X}", i , vpn[i], virtual_address >> (PAGE_BITS + i*PAGE_MAP_BITS));
 	}
