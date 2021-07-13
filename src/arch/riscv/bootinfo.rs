@@ -36,9 +36,11 @@ pub struct BootInfo {
 	pub hcip: [u8; 4],
 	pub hcgateway: [u8; 4],
 	pub hcmask: [u8; 4],
-	pub timebase_freq: u64,
-	pub mem_base: u64,
+	pub dtb_ptr: u64,
+	// pub timebase_freq: u64,
+	// pub mem_base: u64,
 	pub hart_mask: u64,
+	pub timebase_freq: u64,
 }
 
 impl BootInfo {
@@ -70,9 +72,11 @@ impl BootInfo {
 			hcip: [255, 255, 255, 255],
 			hcgateway: [255, 255, 255, 255],
 			hcmask: [255, 255, 255, 0],
-			timebase_freq: 0,
-			mem_base: 0,
+			// timebase_freq: 0,
+			// mem_base: 0,
+			dtb_ptr: 0,
 			hart_mask: 0,
+			timebase_freq: 0,
 		}
 	}
 }
@@ -110,8 +114,9 @@ impl fmt::Debug for BootInfo {
 		writeln!(f, "uartport 0x{:x}", self.uartport)?;
 		writeln!(f, "single_kernel {}", self.single_kernel)?;
 		writeln!(f, "uhyve {}", self.uhyve)?;
-		writeln!(f, "timebase_freq {}", self.timebase_freq)?;
-		writeln!(f, "mem_base {:x}", self.mem_base)?;
+		writeln!(f, "dtb_ptr {:x}", self.dtb_ptr)?;
+		//writeln!(f, "timebase_freq {}", self.timebase_freq)?;
+		//writeln!(f, "mem_base {:x}", self.mem_base)?;
 		writeln!(f, "hart_mask {:x}", self.hart_mask)
 	}
 }
