@@ -45,6 +45,9 @@ static mut TIMEBASE_FREQ: u64 = 0;
 static mut INITRD_START: u64 = 0;
 static mut INITRD_END: u64 = 0;
 
+static mut CMDLINE: u64 = 0;
+static mut CMDSIZE: u64 = 0;
+
 //Each set bit indicates an available hart
 static mut HART_MASK: u64 = 0;
 
@@ -69,13 +72,23 @@ pub unsafe fn find_kernel() -> &'static [u8] {
 	loaderlog!("INITIAL_HART_ID: {}", INITIAL_HART_ID);
 	let dtb = Dtb::from_raw(DTB_PTR as *const u8).expect("DTB is invalid");
 
-	//loaderlog!("OK2");
+	let memory_reg = dtb
+		.get_property("memory", "reg")
+		.expect("Memory node not found in dtb");
+	let timebase_data = dtb
+		.get_property("cpus", "timebase-frequency")
+		.expect("timebase-frequency node not found in /cpus");
+	let initrd_start = dtb
+		.get_property("chosen", "linux,initrd-start")
+		.expect("linux,initrd-start node not found in /chosen");
+	let initrd_end = dtb
+		.get_property("chosen", "linux,initrd-end")
+		.expect("linux,initrd-end node not found in /chosen");
 
-	let memory_reg = dtb.get_property("memory", "reg").expect("Memory node not found in dtb");
-	let timebase_data = dtb.get_property("cpus", "timebase-frequency").expect("timebase-frequency node not found in /cpus");
-	let initrd_start = dtb.get_property("chosen", "linux,initrd-start").expect("linux,initrd-start node not found in /chosen");
-	let initrd_end = dtb.get_property("chosen", "linux,initrd-end").expect("linux,initrd-end node not found in /chosen");
-	//loaderlog!("OK3");
+	if let Some(cmdline) = dtb.get_property("chosen", "bootargs") {
+		CMDSIZE = cmdline.len() as u64;
+		CMDLINE = cmdline.as_ptr() as u64;
+	}
 
 	for i in (memory_reg.len()/2)..(memory_reg.len()) {
 		MEM_SIZE <<= 8;
@@ -173,6 +186,9 @@ pub unsafe fn boot_kernel(address: u64, mem_size: u64, entry_point: u64) -> ! {
 	BOOT_INFO.timebase_freq = TIMEBASE_FREQ;
 	BOOT_INFO.dtb_ptr = DTB_PTR as u64;
 	BOOT_INFO.hart_mask = HART_MASK;
+
+	BOOT_INFO.cmdline = CMDLINE;
+	BOOT_INFO.cmdsize = CMDSIZE;
 
 	loaderlog!("BootInfo located at 0x{:x}", &BOOT_INFO as *const _ as u64);
 	loaderlog!("Use stack address 0x{:x}", BOOT_INFO.current_stack_address);
