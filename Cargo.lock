@@ -100,7 +100,7 @@ dependencies = [
 [[package]]
 name = "hermit-dtb"
 version = "0.1.0"
-source = "git+https://github.com/hermitcore/dtb.git?branch=master#9d8030fd37a48e95f69e9014e78d0c0049dcc0c6"
+source = "git+https://github.com/simonschoening/dtb.git?branch=master#a7acc24a9c0d122ae41e1891ba12c326183ba08c"
 dependencies = [
  "byteorder",
 ]

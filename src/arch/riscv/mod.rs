@@ -32,6 +32,7 @@ pub const KERNEL_STACK_SIZE: usize = 32_768;
 static COM1: SerialPort = SerialPort::new();
 pub static mut BOOT_INFO: BootInfo = BootInfo::new();
 static mut DTB_PTR: usize = 0x82200000;
+static mut DTB_LENGTH: usize = 0;
 static mut INITIAL_HART_ID: usize = usize::MAX;
 static mut MEM_SIZE: u64 = 0;
 // static mut MEM_BASE: u64 = 0;
@@ -65,6 +66,8 @@ pub unsafe fn find_kernel() -> &'static [u8] {
 	loaderlog!("DTB_PTR: {:x}", DTB_PTR);
 	loaderlog!("INITIAL_HART_ID: {}", INITIAL_HART_ID);
 	let dtb = Dtb::from_raw(DTB_PTR as *const u8).expect("DTB is invalid");
+	DTB_LENGTH = dtb.get_length();
+	loaderlog!("DTB length: {}", DTB_LENGTH);
 
 	let memory_reg = dtb
 		.get_property("memory", "reg")
@@ -152,12 +155,12 @@ pub unsafe fn find_kernel() -> &'static [u8] {
 				}
 			}
 		}
-	} 
-	
-	// TODO: Maybe the kernel should not be always loaded after the elf?
-	physicalmem::init(align_up!(INITRD_END as usize, LargePageSize::SIZE));
+	}
 
-	slice::from_raw_parts(INITRD_START as *const u8, (INITRD_END - INITRD_START) as usize)
+	slice::from_raw_parts(
+		INITRD_START as *const u8,
+		(INITRD_END - INITRD_START) as usize,
+	)
 }
 
 pub unsafe fn boot_kernel(address: u64, mem_size: u64, entry_point: u64) -> ! {
@@ -213,6 +216,32 @@ pub unsafe fn boot_kernel(address: u64, mem_size: u64, entry_point: u64) -> ! {
 // }
 
 pub unsafe fn get_memory(memory_size: u64) -> u64 {
+	// TODO: Fix this
+
+	let mut start_address: usize = 0;
+	if DTB_PTR < INITRD_START as usize{
+		loaderlog!("DTB is located before application");
+		start_address = align_up!(DTB_PTR + DTB_LENGTH as usize, LargePageSize::SIZE);
+		if start_address + memory_size as usize >= INITRD_START as usize{
+			start_address = align_up!(INITRD_END as usize, LargePageSize::SIZE);
+			loaderlog!("Loading kernel after initrd");
+		}
+		else {
+			loaderlog!("Loading kernel before initrd");
+		}
+	} else {
+		loaderlog!("DTB is located after application");
+		start_address = align_up!(INITRD_END as usize, LargePageSize::SIZE);
+		if start_address + memory_size as usize >= DTB_PTR{
+			start_address = align_up!(DTB_PTR + DTB_LENGTH  as usize, LargePageSize::SIZE);
+			loaderlog!("Loading kernel after dtb");
+		}
+		else {
+			loaderlog!("Loading kernel before dtb");
+		}
+	}
+
+	physicalmem::init(start_address);
 	physicalmem::allocate(align_up!(memory_size as usize, LargePageSize::SIZE)) as u64
 }
 
