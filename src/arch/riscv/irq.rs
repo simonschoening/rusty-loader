@@ -1,42 +1,25 @@
 use riscv::register::*;
-use riscv::asm::wfi;
 use trapframe::TrapFrame;
 
 /// Init Interrupts
 pub fn install() {
-	unsafe{
+	unsafe {
 		trapframe::init();
 	}
 }
 
-
 /// Enable Interrupts
 #[inline]
 pub fn enable() {
-	unsafe{
+	unsafe {
 		sstatus::set_sie();
-	}
-}
-
-/// Enable Interrupts and wait for the next interrupt (HLT instruction)
-/// According to https://lists.freebsd.org/pipermail/freebsd-current/2004-June/029369.html, this exact sequence of assembly
-/// instructions is guaranteed to be atomic.
-/// This is important, because another CPU could call wakeup_core right when we decide to wait for the next interrupt.
-#[inline]
-pub fn enable_and_wait() {
-	// TODO
-	enable();
-	unsafe{
-		wfi();
 	}
 }
 
 /// Disable Interrupts
 #[inline]
 pub fn disable() {
-	unsafe { 
-		sstatus::clear_sie()
-	};
+	unsafe { sstatus::clear_sie() };
 }
 
 /// Disable IRQs (nested)
@@ -47,7 +30,7 @@ pub fn disable() {
 /// were not activated before calling this function.
 #[inline]
 pub fn nested_disable() -> bool {
-	let  was_enabled = sstatus::read().sie();
+	let was_enabled = sstatus::read().sie();
 
 	disable();
 	was_enabled
@@ -70,17 +53,17 @@ pub fn nested_enable(was_enabled: bool) {
 /// This function is called from `trap.S` which is in the trapframe crate.
 #[no_mangle]
 pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
-    let scause = scause::read();
-    let stval = stval::read();
-    //trace!("Interrupt @ CPU{}: {:?} ", super::cpu::id(), scause.cause());
+	let scause = scause::read();
+	let stval = stval::read();
+	//trace!("Interrupt @ CPU{}: {:?} ", super::cpu::id(), scause.cause());
 	loaderlog!("Interrupt: {:?} ", scause.cause());
-    match scause.cause() {
-        //Trap::Interrupt(I::SupervisorExternal) => external(),
-        //Trap::Interrupt(I::SupervisorSoft) => ipi(),
-        //Trap::Interrupt(I::SupervisorTimer) => crate::arch::riscv::kernel::scheduler::timer_handler(),
-        //Trap::Exception(E::LoadPageFault) => page_fault(stval, tf),
-        //Trap::Exception(E::StorePageFault) => page_fault(stval, tf),
-        //Trap::Exception(E::InstructionPageFault) => page_fault(stval, tf),
-        _ => panic!("unhandled trap {:?}, stval: {:x} tf {:#x?}", scause.cause(), stval, tf),
-    }
+	match scause.cause() {
+		// The trap occurred before the kernel sets stvec => panic!
+		_ => panic!(
+			"unhandled trap {:?}, stval: {:x} tf {:#x?}",
+			scause.cause(),
+			stval,
+			tf
+		),
+	}
 }

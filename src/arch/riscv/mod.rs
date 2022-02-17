@@ -1,16 +1,16 @@
 pub mod addr;
 pub mod bootinfo;
+pub mod irq;
+pub mod paging;
 pub mod physicalmem;
 pub mod serial;
-pub mod paging;
 pub mod stack;
-pub mod irq;
-pub mod addr;
 
-use crate::arch::paging::*;
-use crate::arch::stack::BOOT_STACK;
 pub use self::bootinfo::*;
+use crate::arch::paging::*;
 use crate::arch::riscv::serial::SerialPort;
+use crate::arch::stack::BOOT_STACK;
+use core::arch::{asm, global_asm};
 use core::{slice, str};
 use goblin::elf;
 use hermit_dtb::Dtb;
@@ -35,7 +35,7 @@ static mut DTB_PTR: usize = 0x82200000;
 static mut DTB_LENGTH: usize = 0;
 static mut INITIAL_HART_ID: usize = usize::MAX;
 static mut MEM_SIZE: u64 = 0;
-// static mut MEM_BASE: u64 = 0;
+static mut MEM_BASE: u64 = 0;
 static mut TIMEBASE_FREQ: u64 = 0;
 static mut INITRD_START: u64 = 0;
 static mut INITRD_END: u64 = 0;
@@ -45,13 +45,6 @@ static mut CMDSIZE: u64 = 0;
 
 //Each set bit indicates an available hart
 static mut HART_MASK: u64 = 0;
-
-// fn paddr_to_slice<'a>(p: multiboot::PAddr, sz: usize) -> Option<&'a [u8]> {
-// 	unsafe {
-// 		let ptr = mem::transmute(p);
-// 		Some(slice::from_raw_parts(ptr, sz))
-// 	}
-// }
 
 // FUNCTIONS
 pub fn message_output_init() {
@@ -87,15 +80,15 @@ pub unsafe fn find_kernel() -> &'static [u8] {
 		CMDLINE = cmdline.as_ptr() as u64;
 	}
 
-	for i in (memory_reg.len()/2)..(memory_reg.len()) {
+	for i in (memory_reg.len() / 2)..(memory_reg.len()) {
 		MEM_SIZE <<= 8;
 		MEM_SIZE += memory_reg[i] as u64;
 	}
 
-	// for i in 0..(memory_reg.len()/2) {
-	// 	MEM_BASE <<= 8;
-	// 	MEM_BASE += memory_reg[i] as u64;
-	// }
+	for i in 0..(memory_reg.len() / 2) {
+		MEM_BASE <<= 8;
+		MEM_BASE += memory_reg[i] as u64;
+	}
 
 	for i in 0..(timebase_data.len()) {
 		TIMEBASE_FREQ <<= 8;
@@ -112,13 +105,9 @@ pub unsafe fn find_kernel() -> &'static [u8] {
 		INITRD_END += initrd_end[i] as u64;
 	}
 
-	// loaderlog!("mem_base: {:x}, mem_size: {:x}, timebase-freq: {}", MEM_BASE, MEM_SIZE, TIMEBASE_FREQ);	
+	// loaderlog!("mem_base: {:x}, mem_size: {:x}, timebase-freq: {}", MEM_BASE, MEM_SIZE, TIMEBASE_FREQ);
 
-	loaderlog!(
-		"Found initrd: [0x{:x} - 0x{:x}]",
-		INITRD_START,
-		INITRD_END
-	);
+	loaderlog!("Found initrd: [0x{:x} - 0x{:x}]", INITRD_START, INITRD_END);
 
 	for node in dtb.enum_subnodes("cpus") {
 		let path = &["cpus/", node].concat();
@@ -130,16 +119,16 @@ pub unsafe fn find_kernel() -> &'static [u8] {
 					let status = if let Some(status) = status_option {
 						if let Ok(string) = str::from_utf8(status) {
 							string
-						}
-						else {
+						} else {
 							panic!("Invalid status in cpus/{:?}", node);
 						}
-					}
-					else {
+					} else {
 						"unknown"
 					};
 
-					let hart_id_slices = dtb.get_property(path, "reg").expect("Missing hart_id in DTB");
+					let hart_id_slices = dtb
+						.get_property(path, "reg")
+						.expect("Missing hart_id in DTB");
 
 					let mut hart_id = 0;
 					for i in 0..(hart_id_slices.len()) {
@@ -163,22 +152,18 @@ pub unsafe fn find_kernel() -> &'static [u8] {
 	)
 }
 
-pub unsafe fn boot_kernel(address: u64, mem_size: u64, entry_point: u64) -> ! {
-	// let new_addr = align_up!(&kernel_end as *const u8 as usize, LargePageSize::SIZE) as u64;
-
-	// // copy app to the new start address
-	// copy(
-	// 	virtual_address as *const u8,
-	// 	new_addr as *mut u8,
-	// 	mem_size.try_into().unwrap(),
-	// );
-
+pub unsafe fn boot_kernel(
+	_elf_address: Option<u64>,
+	address: u64, // Physical address
+	mem_size: u64,
+	entry_point: u64,
+) -> ! {
 	// Supply the parameters to the HermitCore application.
 	BOOT_INFO.base = address;
 	BOOT_INFO.image_size = mem_size;
 	BOOT_INFO.current_stack_address = &BOOT_STACK as *const _ as u64;
 
-	// BOOT_INFO.mem_base = MEM_BASE;
+	BOOT_INFO.ram_start = MEM_BASE;
 	BOOT_INFO.limit = MEM_SIZE;
 	BOOT_INFO.timebase_freq = TIMEBASE_FREQ;
 	BOOT_INFO.dtb_ptr = DTB_PTR as u64;
@@ -206,37 +191,26 @@ pub unsafe fn boot_kernel(address: u64, mem_size: u64, entry_point: u64) -> ! {
 	func(INITIAL_HART_ID, &mut BOOT_INFO);
 }
 
-// unsafe fn map_memory(address: usize, memory_size: usize) -> usize {
-// 	let address = align_up!(address, LargePageSize::SIZE);
-// 	let page_count = align_up!(memory_size, LargePageSize::SIZE) / LargePageSize::SIZE;
-
-// 	paging::map::<LargePageSize>(address, address, page_count, PageTableEntryFlags::WRITABLE);
-
-// 	address
-// }
-
 pub unsafe fn get_memory(memory_size: u64) -> u64 {
 	// TODO: Fix this
 
-	let mut start_address: usize = 0;
-	if DTB_PTR < INITRD_START as usize{
+	let mut start_address;
+	if DTB_PTR < INITRD_START as usize {
 		loaderlog!("DTB is located before application");
 		start_address = align_up!(DTB_PTR + DTB_LENGTH as usize, LargePageSize::SIZE);
-		if start_address + memory_size as usize >= INITRD_START as usize{
+		if start_address + memory_size as usize >= INITRD_START as usize {
 			start_address = align_up!(INITRD_END as usize, LargePageSize::SIZE);
 			loaderlog!("Loading kernel after initrd");
-		}
-		else {
+		} else {
 			loaderlog!("Loading kernel before initrd");
 		}
 	} else {
 		loaderlog!("DTB is located after application");
 		start_address = align_up!(INITRD_END as usize, LargePageSize::SIZE);
-		if start_address + memory_size as usize >= DTB_PTR{
-			start_address = align_up!(DTB_PTR + DTB_LENGTH  as usize, LargePageSize::SIZE);
+		if start_address + memory_size as usize >= DTB_PTR {
+			start_address = align_up!(DTB_PTR + DTB_LENGTH as usize, LargePageSize::SIZE);
 			loaderlog!("Loading kernel after dtb");
-		}
-		else {
+		} else {
 			loaderlog!("Loading kernel before dtb");
 		}
 	}
@@ -264,4 +238,3 @@ pub extern "C" fn _rust_start() -> ! {
 		)
 	}
 }
-

@@ -1,3 +1,5 @@
+use core::arch::asm;
+
 pub struct SerialPort {}
 
 impl SerialPort {
@@ -25,6 +27,5 @@ impl SerialPort {
 		SerialPort::sbi_putchar(byte);
 	}
 
-	pub fn init(&self) {
-	}
+	pub fn init(&self) {}
 }
